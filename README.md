@@ -8,7 +8,7 @@ Project Overview:
 
 This project explores whether equivariant neural networks can rapidly classify black hole spin alignment, a key observable for distinguishing formation channels in gravitational wave astronomy. Using the e3nn library, I built a rotation-invariant classifier that achieves near-perfect accuracy on synthetic binary black hole systems.
 
-    **Results:**
+ **Results:**
     - Training Accuracy: 99.8%
     - Validation Accuracy: 100%
     - Equivariance Test: 100%
@@ -20,7 +20,7 @@ Primary black hole spin alignment reveals its history:
     - Misaligned (χ_eff ≈ 0): Dynamical capture (clusters, AGN)
     - Anti-aligned (χ_eff < 0): Hypothesized hierarchical mergers 
 
-    Current LIGO observations show a mix of these alignments, suggesting different ways a black hole may form across time. 
+ Current LIGO observations show a mix of these alignments, suggesting different ways a black hole may form across time. 
 
 Why Equivariance?: 
 
@@ -57,4 +57,5 @@ Future Improvements:
 
 
 Developed as an independent exploration of geometric deep learning for gravitational wave astronomy.
+
 
