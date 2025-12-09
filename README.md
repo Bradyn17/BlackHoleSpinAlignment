@@ -33,9 +33,9 @@ The Process:
 
 Input: 
 Spin vectors (v1 & v2) from binary black hole systems 
--> Tensor product (v1 ⊗ v2): Computes geometric features (dot product, cross product, etc)
--> Batch Normalization
--> MLP Classifier (10 -> 16 -> 2)
+- -> Tensor product (v1 ⊗ v2): Computes geometric features (dot product, cross product, etc)
+- -> Batch Normalization
+- -> MLP Classifier (10 -> 16 -> 2)
 Output: 
 Aligned or Misaligned
 
@@ -51,9 +51,10 @@ Future Improvements:
  - Simplified the physics: Should expand more to accurately match parameters found in black hole detections
 
 **Contact**
-Bradyn Livingston
-bradynlivingston0053@gmail.com
-Indiana University - Indianapolis
+- Bradyn Livingston
+- bradynlivingston0053@gmail.com
+- Indiana University - Indianapolis
 
 
 Developed as an independent exploration of geometric deep learning for gravitational wave astronomy.
+
