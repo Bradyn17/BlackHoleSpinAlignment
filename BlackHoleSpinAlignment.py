@@ -3,22 +3,22 @@ import torch.nn as nn
 import torch.optim as optim
 import e3nn.o3
 import e3nn.nn
-from e3nn.nn import BatchNorm
-from e3nn.o3 import FullyConnectedTensorProduct
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.spatial.transform
 from scipy.spatial.transform import Rotation as R
-import sklearn.metrics
 
-# Generate pairs of vectors that are either parallel or perpendicular. (Binary or Dynamical Black Hole Formation)
+SEED = 42
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+# Generate synthetic pairs of vectors that are either parallel or perpendicular. (Binary or Dynamical Black Hole Formation)
 def generate_parallel_perpendicular_data(n_samples=1000, noise_level=0.1): # Because nature is not perfect, add random noise to alter the numbers slightly
     v1_list = []
     v2_list = []
     labels = [] # parallel or perpendicular
 
     for i in range(n_samples): # create the list of vectors n times
-        v1 = np.random.rand(3) # generate vector having 3 numbers (x, y, z)
+        v1 = np.random.randn(3) # generate vector having 3 numbers (x, y, z)
         v1 = v1 / np.linalg.norm(v1) # normalize the vectors to a length of 1 (makes it fair for smaller numbers)
         
         label = np.random.randint(0, 2) # random 50/50 result of 0 or 1 (parallel or perpendicular)
@@ -82,7 +82,8 @@ class AlignmentClassifier(nn.Module): # Creating the custom neural network model
         self.irreps_output = e3nn.o3.Irreps("10x0e")  # "10x0e" = 10x(channels)0(scalar)e(even parity)
         
         # Tensor product: v1 ⊗ v2
-        # Outputs geometric features encoding dot product, cross product, etc.
+        # Outputs rotationally invariant scalar features from geometric relationships between vector 1 and 2
+        # Since the output is 0e, these features contain dot-product-like information than just vector information
         self.tp = e3nn.o3.FullyConnectedTensorProduct( # FullyConnectedTensorProduct preforms tensor product between two input features to produce an output tensor which desired features
             self.irreps_in,  # vector v1
             self.irreps_in,  # vector v2
@@ -135,50 +136,58 @@ def train_model(model, data, n_epochs=100, lr=0.01): # model = the ML model need
 
     return losses, accuracies
 
-# Tests to find if the ML model is truly equivariant 
-def test_equivariance(model, n_tests=100): # tests the input model 100 times
-   
-    print(f"EQUIVARIANCE TEST")
+# Tests to find if the ML model is truly invariant under rotation
+def test_rotation_invariance(model, n_tests=100): # tests the input model 100 times
+
+    print(f"ROTATION INVARIANCE TEST")
     model.eval() # sets to PyTorch inference mode
-    
-    correct = 0 # intializes correct and total to 0 
-    total = 0
-    
-    with torch.no_grad(): # loops n_test times without gradients being calculated
+
+    differences = [] # creates an empty list to store the difference between original and rotated predictions
+
+    with torch.no_grad(): # loops n_tests times without gradients being calculated
         for _ in range(n_tests):
+
             # Generate a pair of random vectors
-            v1 = np.random.randn(3)
-            v1 = v1 / np.linalg.norm(v1)
-            
-            label = np.random.randint(0, 2)
-            if label == 0:  # Parallel
-                v2 = v1 + 0.1 * np.random.randn(3)
-            else:  # Perpendicular
-                r = np.random.randn(3)
-                v2 = r - np.dot(r, v1) * v1
-            v2 = v2 / np.linalg.norm(v2)
-            
+            v1 = np.random.randn(3) # generates a vector with 3 random numbers (x, y, z)
+            v1 = v1 / np.linalg.norm(v1) # normalizes the vector to a length of 1
+
+            v2 = np.random.randn(3) # generates a second random 3D vector
+            v2 = v2 / np.linalg.norm(v2) # normalizes the second vector to a length of 1
+
+            # Convert original vectors into PyTorch tensors
+            v1_t = torch.tensor(v1, dtype=torch.float32).unsqueeze(0) # converts v1 into a PyTorch tensor and adds a batch dimension
+            v2_t = torch.tensor(v2, dtype=torch.float32).unsqueeze(0) # converts v2 into a PyTorch tensor and adds a batch dimension
+
+            # Get model output BEFORE rotation
+            original_logits = model(v1_t, v2_t) # passes original vectors through the model and stores the raw prediction scores
+
             # Rotate BOTH vectors by the SAME rotation (preserves relationship)
-            rot = R.random().as_matrix()
-            v1_rot = rot @ v1
-            v2_rot = rot @ v2
-            
-            # Predict
-            v1_t = torch.tensor(v1_rot, dtype=torch.float32).unsqueeze(0) # converts existing data in v1_rot into a PyTorch tensor with a 32-bit floating point. .unsqueeze(0) adds a new dimension of size 1 at index 0 (batch size)
-            v2_t = torch.tensor(v2_rot, dtype=torch.float32).unsqueeze(0)
-            pred = torch.argmax(model(v1_t, v2_t)).item() # passes the two tensors through the ML model to get an output, argmax finds index with max value (label), .item() extracts the value of the predicted label from the tensor
-            
-            if pred == label: # conditional to compare the prediction to the answer
-                correct += 1
-            total += 1
-    
-    accuracy = correct / total # calculates the accuracy 
-    print(f"Accuracy on rotated pairs (same rotation): {accuracy*100:.1f}%")
-    return accuracy
+            rot = R.random().as_matrix() # generates a random 3x3 rotation matrix
+            v1_rot = rot @ v1 # applies the rotation matrix to v1
+            v2_rot = rot @ v2 # applies the same rotation matrix to v2
+
+            # Convert rotated vectors into PyTorch tensors
+            v1_rot_t = torch.tensor(v1_rot, dtype=torch.float32).unsqueeze(0) # converts rotated v1 into a PyTorch tensor with batch dimension
+            v2_rot_t = torch.tensor(v2_rot, dtype=torch.float32).unsqueeze(0) # converts rotated v2 into a PyTorch tensor with batch dimension
+
+            # Get model output AFTER rotation
+            rotated_logits = model(v1_rot_t, v2_rot_t) # passes rotated vectors through the same model
+
+            # Compare output before and after rotation
+            diff = torch.max(torch.abs(original_logits - rotated_logits)).item() # finds the largest absolute difference between the two outputs
+            differences.append(diff) # stores the difference from this test
+
+    max_difference = max(differences) # finds the largest difference across all rotation tests
+    mean_difference = np.mean(differences) # finds the average difference across all rotation tests
+
+    print(f"Maximum output difference: {max_difference:.8e}")
+    print(f"Mean output difference: {mean_difference:.8e}")
+
+    return max_difference
 
 # tests on a different validation set
 def test_on_validation_set(model, val_data):
-    print(f"Valdidation Test Set")
+    print(f"Validation Test Set")
     model.eval()
     
     with torch.no_grad(): # disables gradient calculation
@@ -191,7 +200,7 @@ def test_on_validation_set(model, val_data):
 
 
 if __name__ == "__main__":
-    print("Equivariant Vector Alignment Classifier")
+    print("E(3)-Equivariant Vector Alignment Classifier") # rotation-invariant vector alignment classifier using e3nn
     
     # Generate data
     print("Generating training data")
@@ -232,11 +241,11 @@ if __name__ == "__main__":
     
     # Run tests
     val_acc = test_on_validation_set(model, val_data)
-    eq_acc = test_equivariance(model, n_tests=200)
+    invariance_error = test_rotation_invariance(model, n_tests=200) # tests whether rotating both vectors changes the output
     
     print("Final Results")
     print(f"Training Accuracy:   {accs[-1]*100:.1f}%")
     print(f"Validation Accuracy: {val_acc*100:.1f}%")
-    print(f"Equivariance Test:   {eq_acc*100:.1f}%")
+    print(f"Rotation Invariance Error: {invariance_error:.8e}")
     
     plt.show()
